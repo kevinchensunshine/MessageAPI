@@ -27,7 +27,7 @@ Scaffold-DbContext “Server={database servername}; Database={Database Name};Tru
 }
 
 - Run the following code in your  package manager console :
-- 
+
 add-migration initial
 
 - Run the following to update your database models run :
