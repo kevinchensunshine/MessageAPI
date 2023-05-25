@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using APIsCS.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +15,7 @@ builder.Services.AddCors(options =>
 
 });
 
-builder.Services.AddDbContext<APIsCS.Models.ApplicationDbContext>(options =>
+builder.Services.AddDbContext<MessagesDbContext>(options =>
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
 });

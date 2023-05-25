@@ -9,64 +9,50 @@ namespace APIsCS.Controllers
     public class MessageController : ControllerBase
     {
         private readonly ILogger<MessageController> _logger;
-        public MessageController(ILogger<MessageController> logger)
-        {
+        private readonly MessagesDbContext _context;
+
+        public MessageController(ILogger<MessageController> logger, [FromServices] MessagesDbContext context) {
             _logger = logger;
+            _context = context;
         }
 
 
         [HttpPost("message")]
         public IActionResult PostMessage(Message message)
         {
-            // Store the message in a text file
-            string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "messages.txt");
-            string messageString = JsonSerializer.Serialize(message);
-            System.IO.File.AppendAllText(filePath, messageString + Environment.NewLine);
-
-            // Return a success response
+            _context.Messages.Add(message);
+            _logger.LogInformation(_context.SaveChanges() + " elements written into database");
             return Ok();
         }
 
         static readonly string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "messages.txt");
 
         [HttpGet("message/{email}")]
-        public ActionResult<Message> GetMessage(string email)
+        public ActionResult<Message> GetMessage(string searchTerm)
         {
             //searches for email
-            const Int32 BufferSize = 256;
-            _logger.LogInformation("Received email: {Email}", email);
-            var fileStream = System.IO.File.OpenRead(filePath);
-            var streamReader = new StreamReader(fileStream, System.Text.Encoding.UTF8, true, BufferSize);
+            _logger.LogInformation("Received search term: {SearchTerm}", searchTerm);
 
-            string? line;
-
-            while ((line = streamReader.ReadLine()) != null)
+            try
             {
-                try
-                {
-                    Message? existingMessage = JsonSerializer.Deserialize<Message>(line);
-                    if (existingMessage == null)
-                    {
-                        _logger.LogInformation("Found Null Line\n");
-                        continue;
-                    }
-                    if (existingMessage.Email == email)
-                    {
-                        _logger.LogInformation("Found line\n");
-                        return existingMessage;
-                    }
-                }
-                catch (Exception e)
-                {
-                    _logger.LogError(e.Message + " " + e.StackTrace);
-                }
+                var matchingMessages = _context.Messages
+                    .Where(m => m.Name.Contains(searchTerm) || m.Email.Contains(searchTerm))
+                    .ToList();
 
+                if (matchingMessages.Count > 0)
+                {
+                    return Ok(matchingMessages);
+                }
+                else
+                {
+                    return NotFound();
+                }
             }
-
-            fileStream.Close();
-            streamReader.Close();
-        
-            return NotFound();
+            catch (Exception e)
+            {
+                _logger.LogError(e.Message + " " + e.StackTrace);
+                return StatusCode(500); // Internal Server Error
+            }
         }
 
         [HttpDelete("message/{email}")]
@@ -104,12 +90,11 @@ namespace APIsCS.Controllers
                         {
                             sw.WriteLine(line);
                         }
-                    }
-                    catch (Exception e)
+                    } catch (Exception e)
                     {
                         _logger.LogError(e.Message + " " + e.StackTrace);
                     }
-
+                    
                 }
 
                 fileStream.Close();
@@ -118,8 +103,7 @@ namespace APIsCS.Controllers
 
                 System.IO.File.Delete(filePath);
                 System.IO.File.Move(tempFile, filePath);
-            }
-            catch (Exception e)
+            } catch (Exception e)
             {
                 _logger.LogError(e.Message + " " + e.StackTrace);
             }
@@ -132,7 +116,7 @@ namespace APIsCS.Controllers
         {
             string email = message.Email;
             const Int32 BufferSize = 256;
-
+            
             _logger.LogInformation("Received email: {Email}", email);
 
             var fileStream = System.IO.File.OpenRead(filePath);
@@ -146,8 +130,7 @@ namespace APIsCS.Controllers
 
             while ((line = streamReader.ReadLine()) != null)
             {
-                try
-                {
+                try {
                     Message? existingMessage = JsonSerializer.Deserialize<Message>(line);
                     if (existingMessage == null)
                     {
@@ -166,14 +149,12 @@ namespace APIsCS.Controllers
                     {
                         sw.WriteLine(line);
                     }
-                }
-                catch (Exception e)
+                } catch (Exception e)
                 {
                     _logger.LogError(e.Message + " " + e.StackTrace);
                 }
             }
-            try
-            {
+            try { 
                 fileStream.Close();
                 streamReader.Close();
                 sw.Close();
