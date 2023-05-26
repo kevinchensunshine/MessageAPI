@@ -11,7 +11,8 @@ namespace APIsCS.Controllers
         private readonly ILogger<MessageController> _logger;
         private readonly MessagesDbContext _context;
 
-        public MessageController(ILogger<MessageController> logger, [FromServices] MessagesDbContext context) {
+        public MessageController(ILogger<MessageController> logger, [FromServices] MessagesDbContext context)
+        {
             _logger = logger;
             _context = context;
         }
@@ -59,115 +60,73 @@ namespace APIsCS.Controllers
         public IActionResult DeleteMessage(string email)
         {
             //searches for email
-            const Int32 BufferSize = 256;
-            _logger.LogInformation("Received email: {Email}", email);
-            var fileStream = System.IO.File.OpenRead(filePath);
-            var streamReader = new StreamReader(fileStream, System.Text.Encoding.UTF8, true, BufferSize);
-            string tempFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "temp_messages.txt");
-            var sw = new StreamWriter(tempFile);
+            _logger.LogInformation("Received search term: {SearchTerm}", email);
 
-            string? line;
-            bool flag = false;
             try
             {
-                while ((line = streamReader.ReadLine()) != null)
+                var matchingMessages = _context.Messages
+                    .Where(m => m.Name.Contains(email) || m.Email.Contains(email));
+
+                if (matchingMessages.Any())
                 {
-                    try
-                    {
-                        Message? existingMessage = JsonSerializer.Deserialize<Message>(line);
-                        if (existingMessage == null)
-                        {
-                            _logger.LogInformation("Found Null Line\n");
-                            continue;
-                        }
-                        if (existingMessage.Email == email)
-                        {
-                            _logger.LogInformation("Found and deleting line\n");
-                            flag = true;
-                            continue;
-                        }
-                        else
-                        {
-                            sw.WriteLine(line);
-                        }
-                    } catch (Exception e)
-                    {
-                        _logger.LogError(e.Message + " " + e.StackTrace);
-                    }
-                    
+                    _context.Messages.RemoveRange(matchingMessages);
+                    _context.SaveChanges();
+                    return Ok("Deleted: " + matchingMessages);
                 }
-
-                fileStream.Close();
-                streamReader.Close();
-                sw.Close();
-
-                System.IO.File.Delete(filePath);
-                System.IO.File.Move(tempFile, filePath);
-            } catch (Exception e)
+                else
+                {
+                    return Ok("Email not found in database");
+                }
+            }
+            catch (Exception e)
             {
                 _logger.LogError(e.Message + " " + e.StackTrace);
+                return StatusCode(500); // Internal Server Error
             }
+        }
 
-            return flag ? Ok() : NotFound();
+        Message EditMessage(Message original, Message new_message)
+        {
+            original.Name = new_message.Name;
+            original.Email = new_message.Email;
+            original.Content = new_message.Content;
+            return original;
         }
 
         [HttpPut("message")]
         public IActionResult PutMessage(Message message)
         {
+            //searches for email
+            _logger.LogInformation("Received message", message);
+
             string email = message.Email;
-            const Int32 BufferSize = 256;
-            
-            _logger.LogInformation("Received email: {Email}", email);
+            string name = message.Name;
 
-            var fileStream = System.IO.File.OpenRead(filePath);
-            var streamReader = new StreamReader(fileStream, System.Text.Encoding.UTF8, true, BufferSize);
-            string tempFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "temp_messages.txt");
-
-            var sw = new StreamWriter(tempFile);
-
-            string? line;
-            bool flag = false;
-
-            while ((line = streamReader.ReadLine()) != null)
+            try
             {
-                try {
-                    Message? existingMessage = JsonSerializer.Deserialize<Message>(line);
-                    if (existingMessage == null)
-                    {
-                        _logger.LogInformation("Empty message");
-                        continue;
-                    }
-                    if (existingMessage.Email == email)
-                    {
-                        _logger.LogInformation("Found and replacing line\n");
-                        string messageString = JsonSerializer.Serialize(message);
-                        sw.Write(messageString + Environment.NewLine);
-                        flag = true;
-                        continue;
-                    }
-                    else
-                    {
-                        sw.WriteLine(line);
-                    }
-                } catch (Exception e)
-                {
-                    _logger.LogError(e.Message + " " + e.StackTrace);
-                }
-            }
-            try { 
-                fileStream.Close();
-                streamReader.Close();
-                sw.Close();
+                var matchingMessages = _context.Messages
+                    .Where(m => m.Name.Contains(name) || m.Email.Contains(email)).ToList();
 
-                System.IO.File.Delete(filePath);
-                System.IO.File.Move(tempFile, filePath);
+                if (matchingMessages.Any())
+                {
+                    foreach (Message matched_message in matchingMessages) {
+                        matched_message.Name = message.Name;
+                        matched_message.Email = message.Email;
+                        matched_message.Content = message.Content;
+                        _context.SaveChanges();
+                    }
+                    return Ok("Changed: " + matchingMessages);
+                }
+                else
+                {
+                    return Ok("Email not found in database");
+                }
             }
             catch (Exception e)
             {
                 _logger.LogError(e.Message + " " + e.StackTrace);
+                return StatusCode(500); // Internal Server Error
             }
-
-            return flag ? Ok() : NotFound();
         }
     }
 }
